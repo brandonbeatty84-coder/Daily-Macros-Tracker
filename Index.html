@@ -1,341 +1,519 @@
-import { useState, useEffect } from "react";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Daily Fuel" />
+  <title>Daily Fuel</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      background: #0b0b10;
+      color: #fff;
+      font-family: -apple-system, 'Inter', sans-serif;
+      min-height: 100vh;
+      padding-bottom: 48px;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-5px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes ringFill {
+      from { stroke-dasharray: 0 999; }
+    }
+    input::placeholder { color: rgba(255,255,255,0.22); }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input { -webkit-appearance: none; appearance: none; }
 
-const DAILY_TARGETS = { calories: 2550, protein: 200, carbs: 250, fat: 75 };
-const getTodayKey = () => new Date().toISOString().split("T")[0];
-const STORAGE_KEY = "brandon_fuel_v2";
+    #app { max-width: 460px; margin: 0 auto; padding: 0 16px; }
 
-const PRESETS = [
-  { name: "Post Workout Shake", calories: 472, protein: 51, carbs: 31, fat: 18 },
-  { name: "Breakfast - Eggs & Veggies", calories: 320, protein: 24, carbs: 8, fat: 20 },
-  { name: "Breakfast - Greek Yogurt & Berries", calories: 280, protein: 20, carbs: 32, fat: 6 },
-];
+    /* Header */
+    #header {
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      padding: 18px 20px 14px;
+      background: linear-gradient(180deg, rgba(168,255,120,0.06) 0%, transparent 100%);
+      margin-bottom: 0;
+    }
+    #header-inner {
+      max-width: 460px; margin: 0 auto;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .header-label { font-size: 10px; letter-spacing: 3px; color: #a8ff78; text-transform: uppercase; font-family: monospace; margin-bottom: 3px; }
+    .header-title { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+    .header-date { font-size: 11px; color: rgba(255,255,255,0.35); font-family: monospace; text-align: right; }
+    #protein-badge {
+      margin-top: 4px; font-size: 11px; font-family: monospace;
+      background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 20px;
+      display: inline-block;
+    }
 
-function MacroRing({ value, max, color, label }) {
-  const pct = Math.min(value / max, 1);
-  const r = 30;
-  const circ = 2 * Math.PI * r;
-  const dash = pct * circ;
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-      <div style={{ position: "relative", width: 76, height: 76 }}>
-        <svg width="76" height="76" style={{ transform: "rotate(-90deg)", position: "absolute", top: 0, left: 0 }}>
-          <circle cx="38" cy="38" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="7" />
-          <circle cx="38" cy="38" r={r} fill="none" stroke={color} strokeWidth="7"
-            strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
-            style={{ transition: "stroke-dasharray 0.5s ease" }} />
+    /* Cards */
+    .card {
+      background: rgba(255,255,255,0.025);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 14px;
+      margin-top: 10px;
+    }
+
+    /* Cal bar */
+    #cal-card { padding: 16px 18px; }
+    #cal-num { font-size: 42px; font-weight: 800; font-family: monospace; letter-spacing: -2px; line-height: 1; }
+    #cal-max { font-size: 14px; color: rgba(255,255,255,0.3); margin-left: 6px; font-family: monospace; }
+    #cal-top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; }
+    #cal-badge { font-size: 12px; font-family: monospace; padding: 4px 12px; border-radius: 20px; }
+    #cal-track { height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
+    #cal-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; background: linear-gradient(90deg, #a8ff78, #78ffd6); }
+
+    /* Macro rings */
+    #rings-card { padding: 14px 10px; display: grid; grid-template-columns: repeat(3,1fr); gap: 4px; }
+    .ring-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .ring-container { position: relative; width: 76px; height: 76px; }
+    .ring-svg { transform: rotate(-90deg); position: absolute; top: 0; left: 0; }
+    .ring-track { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 7; }
+    .ring-fill { fill: none; stroke-width: 7; stroke-linecap: round; transition: stroke-dasharray 0.5s ease; }
+    .ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .ring-val { font-size: 14px; font-weight: 700; color: #fff; font-family: monospace; line-height: 1; }
+    .ring-max { font-size: 8px; color: rgba(255,255,255,0.35); letter-spacing: 1px; }
+    .ring-label { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; font-family: monospace; }
+
+    /* Section label */
+    .section-label {
+      font-size: 10px; letter-spacing: 2px; color: rgba(255,255,255,0.25);
+      text-transform: uppercase; font-family: monospace;
+      margin: 12px 0 6px 2px;
+    }
+
+    /* Preset buttons */
+    .preset-btn {
+      display: flex; justify-content: space-between; align-items: center;
+      background: rgba(168,255,120,0.04); border: 1px solid rgba(168,255,120,0.1);
+      border-radius: 10px; padding: 10px 14px; cursor: pointer; text-align: left;
+      width: 100%; margin-bottom: 5px; transition: background 0.15s;
+      color: #fff;
+    }
+    .preset-btn:active { background: rgba(168,255,120,0.12); }
+    .preset-name { font-size: 13px; font-weight: 500; }
+    .preset-macros { display: flex; gap: 8px; font-size: 11px; font-family: monospace; flex-shrink: 0; margin-left: 8px; }
+
+    /* Toggle button */
+    #toggle-btn {
+      margin-top: 4px; width: 100%; padding: 11px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 10px; cursor: pointer; color: rgba(255,255,255,0.6);
+      font-size: 13px; font-weight: 600; font-family: inherit; transition: all 0.15s;
+    }
+    #toggle-btn:active { background: rgba(255,255,255,0.08); }
+
+    /* Form */
+    #entry-form {
+      margin-top: 8px; padding: 14px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      animation: fadeIn 0.2s ease;
+      display: none;
+    }
+    #entry-form.open { display: block; }
+    .field-label { font-size: 10px; color: rgba(255,255,255,0.4); margin-bottom: 4px; font-family: monospace; letter-spacing: 1px; text-transform: uppercase; }
+    .field-input {
+      width: 100%; background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px; padding: 9px 12px;
+      color: #fff; font-size: 14px; outline: none; font-family: inherit;
+    }
+    .field-input:focus { border-color: rgba(168,255,120,0.4); }
+    .field-input.error { border-color: #ff6b6b; }
+    #name-wrap { margin-bottom: 10px; }
+    #macro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    #log-btn {
+      width: 100%; padding: 12px;
+      background: rgba(168,255,120,0.15); border: 1px solid rgba(168,255,120,0.3);
+      border-radius: 10px; cursor: pointer; color: #a8ff78;
+      font-size: 14px; font-weight: 700; font-family: inherit; transition: all 0.15s;
+    }
+    #log-btn:active { background: rgba(168,255,120,0.25); }
+    #form-hint { margin-top: 8px; font-size: 11px; color: rgba(255,255,255,0.18); font-family: monospace; text-align: center; }
+
+    /* Food log */
+    #log-section { margin-top: 12px; }
+    #log-count { font-size: 10px; letter-spacing: 2px; color: rgba(255,255,255,0.25); text-transform: uppercase; font-family: monospace; margin-bottom: 7px; padding-left: 2px; }
+    #entries-list {}
+    .entry-row {
+      display: flex; align-items: center; gap: 10;
+      padding: 10px 12px; border-radius: 10px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      margin-bottom: 5px; animation: fadeIn 0.25s ease;
+    }
+    .entry-info { flex: 1; min-width: 0; }
+    .entry-name { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .entry-macros { display: flex; gap: 10px; font-size: 11px; font-family: monospace; }
+    .del-btn {
+      background: none; border: none; cursor: pointer;
+      color: rgba(255,255,255,0.15); font-size: 18px; line-height: 1;
+      padding: 4px 8px; border-radius: 6px; transition: all 0.15s; flex-shrink: 0;
+    }
+    .del-btn:active { color: #ff6b6b; background: rgba(255,107,107,0.1); }
+
+    /* Empty state */
+    #empty-state {
+      margin-top: 20px; text-align: center; padding: 28px 20px;
+      border: 1px dashed rgba(255,255,255,0.07); border-radius: 14px;
+    }
+    #empty-state .icon { font-size: 26px; margin-bottom: 8px; }
+    #empty-state .msg { font-size: 13px; color: rgba(255,255,255,0.3); font-family: monospace; }
+    #empty-state .sub { font-size: 11px; color: rgba(255,255,255,0.18); margin-top: 4px; font-family: monospace; }
+
+    /* Targets */
+    #targets-card {
+      margin-top: 14px; padding: 10px 14px;
+      background: rgba(120,180,255,0.03);
+      border: 1px solid rgba(120,180,255,0.08);
+      border-radius: 10px;
+    }
+    #targets-label { font-size: 9px; letter-spacing: 2.5px; color: rgba(120,180,255,0.4); text-transform: uppercase; font-family: monospace; margin-bottom: 5px; }
+    #targets-row { display: flex; gap: 16px; font-size: 11px; font-family: monospace; }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <div id="header-inner">
+    <div>
+      <div class="header-label">Brandon Beatty</div>
+      <div class="header-title">Daily Fuel</div>
+    </div>
+    <div style="text-align:right">
+      <div class="header-date" id="today-date"></div>
+      <div id="protein-badge"></div>
+    </div>
+  </div>
+</div>
+
+<div id="app">
+  <!-- Cal bar -->
+  <div class="card" id="cal-card">
+    <div id="cal-top">
+      <div>
+        <span id="cal-num">0</span>
+        <span id="cal-max">/ 2550</span>
+      </div>
+      <div id="cal-badge"></div>
+    </div>
+    <div id="cal-track"><div id="cal-fill" style="width:0%"></div></div>
+  </div>
+
+  <!-- Macro rings -->
+  <div class="card" id="rings-card">
+    <div class="ring-wrap">
+      <div class="ring-container">
+        <svg class="ring-svg" width="76" height="76">
+          <circle class="ring-track" cx="38" cy="38" r="30"/>
+          <circle class="ring-fill" id="ring-protein" cx="38" cy="38" r="30" stroke="#78b4ff" stroke-dasharray="0 999"/>
         </svg>
-        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "monospace", lineHeight: 1 }}>{Math.round(value)}</span>
-          <span style={{ fontSize: 8, color: "rgba(255,255,255,0.35)", letterSpacing: 1 }}>/{max}g</span>
+        <div class="ring-center">
+          <span class="ring-val" id="val-protein">0</span>
+          <span class="ring-max">/200g</span>
         </div>
       </div>
-      <span style={{ fontSize: 10, color: color, letterSpacing: 1.5, textTransform: "uppercase", fontFamily: "monospace" }}>{label}</span>
+      <span class="ring-label" style="color:#78b4ff">Protein</span>
     </div>
-  );
-}
-
-function CalBar({ value, max }) {
-  const pct = Math.min(value / max, 1);
-  const over = value > max;
-  const diff = Math.abs(max - value);
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 10 }}>
-        <div>
-          <span style={{ fontSize: 42, fontWeight: 800, color: "#fff", fontFamily: "monospace", letterSpacing: -2, lineHeight: 1 }}>
-            {Math.round(value)}
-          </span>
-          <span style={{ fontSize: 14, color: "rgba(255,255,255,0.3)", marginLeft: 6, fontFamily: "monospace" }}>/ {max}</span>
-        </div>
-        <div style={{
-          fontSize: 12, fontFamily: "monospace", letterSpacing: 0.5,
-          color: over ? "#ff6b6b" : "#a8ff78",
-          background: over ? "rgba(255,107,107,0.1)" : "rgba(168,255,120,0.08)",
-          border: `1px solid ${over ? "rgba(255,107,107,0.25)" : "rgba(168,255,120,0.25)"}`,
-          padding: "4px 12px", borderRadius: 20
-        }}>
-          {over ? `+${Math.round(diff)} over` : `${Math.round(diff)} left`}
+    <div class="ring-wrap">
+      <div class="ring-container">
+        <svg class="ring-svg" width="76" height="76">
+          <circle class="ring-track" cx="38" cy="38" r="30"/>
+          <circle class="ring-fill" id="ring-carbs" cx="38" cy="38" r="30" stroke="#ffb347" stroke-dasharray="0 999"/>
+        </svg>
+        <div class="ring-center">
+          <span class="ring-val" id="val-carbs">0</span>
+          <span class="ring-max">/250g</span>
         </div>
       </div>
-      <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
-        <div style={{
-          height: "100%", width: `${pct * 100}%`,
-          background: over ? "#ff6b6b" : "linear-gradient(90deg, #a8ff78, #78ffd6)",
-          borderRadius: 3, transition: "width 0.5s ease"
-        }} />
+      <span class="ring-label" style="color:#ffb347">Carbs</span>
+    </div>
+    <div class="ring-wrap">
+      <div class="ring-container">
+        <svg class="ring-svg" width="76" height="76">
+          <circle class="ring-track" cx="38" cy="38" r="30"/>
+          <circle class="ring-fill" id="ring-fat" cx="38" cy="38" r="30" stroke="#ff8fab" stroke-dasharray="0 999"/>
+        </svg>
+        <div class="ring-center">
+          <span class="ring-val" id="val-fat">0</span>
+          <span class="ring-max">/75g</span>
+        </div>
+      </div>
+      <span class="ring-label" style="color:#ff8fab">Fat</span>
+    </div>
+  </div>
+
+  <!-- Quick add -->
+  <div class="section-label">Quick Add</div>
+  <div id="presets"></div>
+
+  <!-- Toggle form -->
+  <button id="toggle-btn" onclick="toggleForm()">+ Add Custom Food</button>
+
+  <!-- Entry form -->
+  <div id="entry-form">
+    <div id="name-wrap">
+      <div class="field-label">Food Name</div>
+      <input class="field-input" id="f-name" type="text" placeholder="e.g. Grilled chicken breast 6oz" />
+    </div>
+    <div id="macro-grid">
+      <div>
+        <div class="field-label">Calories</div>
+        <input class="field-input" id="f-cal" type="number" placeholder="300" inputmode="numeric" />
+      </div>
+      <div>
+        <div class="field-label">Protein g</div>
+        <input class="field-input" id="f-pro" type="number" placeholder="30" inputmode="numeric" />
+      </div>
+      <div>
+        <div class="field-label">Carbs g</div>
+        <input class="field-input" id="f-carb" type="number" placeholder="25" inputmode="numeric" />
+      </div>
+      <div>
+        <div class="field-label">Fat g</div>
+        <input class="field-input" id="f-fat" type="number" placeholder="10" inputmode="numeric" />
       </div>
     </div>
-  );
-}
+    <button id="log-btn" onclick="logCustom()">Log Food</button>
+    <div id="form-hint">Send label photos in Claude chat and I'll give you the numbers</div>
+  </div>
 
-function EntryRow({ entry, onDelete }) {
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 10,
-      padding: "10px 12px", borderRadius: 10,
-      background: "rgba(255,255,255,0.03)",
-      border: "1px solid rgba(255,255,255,0.06)",
-      marginBottom: 5, animation: "fadeIn 0.25s ease"
-    }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {entry.name}
-        </div>
-        <div style={{ display: "flex", gap: 10, fontSize: 11, fontFamily: "monospace" }}>
-          <span style={{ color: "#a8ff78" }}>{entry.calories} cal</span>
-          <span style={{ color: "#78b4ff" }}>P {entry.protein}g</span>
-          <span style={{ color: "#ffb347" }}>C {entry.carbs}g</span>
-          <span style={{ color: "#ff8fab" }}>F {entry.fat}g</span>
-        </div>
-      </div>
-      <button onClick={() => onDelete(entry.id)} style={{
-        background: "none", border: "none", cursor: "pointer",
-        color: "rgba(255,255,255,0.15)", fontSize: 18, lineHeight: 1,
-        padding: "2px 6px", borderRadius: 6, transition: "all 0.15s", flexShrink: 0
-      }}
-        onMouseEnter={e => { e.currentTarget.style.color = "#ff6b6b"; e.currentTarget.style.background = "rgba(255,107,107,0.1)"; }}
-        onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,255,255,0.15)"; e.currentTarget.style.background = "none"; }}
-      >×</button>
+  <!-- Food log -->
+  <div id="log-section" style="display:none">
+    <div id="log-count"></div>
+    <div id="entries-list"></div>
+  </div>
+
+  <!-- Empty state -->
+  <div id="empty-state">
+    <div class="icon">🍽️</div>
+    <div class="msg">Nothing logged yet</div>
+    <div class="sub">Tap your shake above to start</div>
+  </div>
+
+  <!-- Targets -->
+  <div id="targets-card">
+    <div id="targets-label">Daily Targets</div>
+    <div id="targets-row">
+      <span style="color:#a8ff78">2550 cal</span>
+      <span style="color:#78b4ff">P: 200g</span>
+      <span style="color:#ffb347">C: 250g</span>
+      <span style="color:#ff8fab">F: 75g</span>
     </div>
-  );
-}
+  </div>
+</div>
 
-const emptyForm = { name: "", calories: "", protein: "", carbs: "", fat: "" };
+<script>
+  const TARGETS = { calories: 2550, protein: 200, carbs: 250, fat: 75 };
+  const STORAGE_KEY = 'brandon_fuel_standalone';
+  const CIRC = 2 * Math.PI * 30;
 
-export default function Tracker() {
-  const [entries, setEntries] = useState([]);
-  const [history, setHistory] = useState({});
-  const [form, setForm] = useState(emptyForm);
-  const [showForm, setShowForm] = useState(false);
-  const [formErrors, setFormErrors] = useState({});
-  const todayKey = getTodayKey();
+  const PRESETS = [
+    { name: 'Post Workout Shake', calories: 472, protein: 51, carbs: 31, fat: 18 },
+    { name: 'Breakfast - Eggs & Veggies', calories: 320, protein: 24, carbs: 8, fat: 20 },
+    { name: 'Breakfast - Greek Yogurt & Berries', calories: 280, protein: 20, carbs: 32, fat: 6 },
+  ];
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        if (window.storage) {
-          const res = await window.storage.get(STORAGE_KEY).catch(() => null);
-          if (res) {
-            const d = JSON.parse(res.value);
-            setHistory(d);
-            setEntries(d[todayKey] || []);
-            return;
-          }
-        }
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const d = JSON.parse(raw);
-          setHistory(d);
-          setEntries(d[todayKey] || []);
-        }
-      } catch (e) {}
-    };
-    load();
-  }, []);
+  let entries = [];
+  let history = {};
+  let formOpen = false;
 
-  const persist = (newHistory) => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(newHistory)); } catch (e) {}
-    if (window.storage) window.storage.set(STORAGE_KEY, JSON.stringify(newHistory)).catch(() => {});
-  };
+  function getTodayKey() {
+    return new Date().toISOString().split('T')[0];
+  }
 
-  const addEntry = (entry) => {
-    const newEntry = { ...entry, id: Date.now(), calories: Number(entry.calories), protein: Number(entry.protein), carbs: Number(entry.carbs), fat: Number(entry.fat) };
-    const updated = [...entries, newEntry];
-    setEntries(updated);
-    const newHistory = { ...history, [todayKey]: updated };
-    setHistory(newHistory);
-    persist(newHistory);
-  };
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        history = JSON.parse(raw);
+        entries = history[getTodayKey()] || [];
+      }
+    } catch(e) {}
+  }
 
-  const deleteEntry = (id) => {
-    const updated = entries.filter(e => e.id !== id);
-    setEntries(updated);
-    const newHistory = { ...history, [todayKey]: updated };
-    setHistory(newHistory);
-    persist(newHistory);
-  };
+  function save() {
+    history[getTodayKey()] = entries;
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(history)); } catch(e) {}
+  }
 
-  const validate = () => {
-    const e = {};
-    if (!form.name.trim()) e.name = "Required";
-    if (!form.calories || isNaN(form.calories)) e.calories = "!";
-    if (form.protein === "" || isNaN(form.protein)) e.protein = "!";
-    if (form.carbs === "" || isNaN(form.carbs)) e.carbs = "!";
-    if (form.fat === "" || isNaN(form.fat)) e.fat = "!";
-    return e;
-  };
+  function addEntry(entry) {
+    entries.push({ ...entry, id: Date.now(), calories: Number(entry.calories), protein: Number(entry.protein), carbs: Number(entry.carbs), fat: Number(entry.fat) });
+    save();
+    render();
+  }
 
-  const handleAdd = () => {
-    const e = validate();
-    if (Object.keys(e).length) { setFormErrors(e); return; }
-    addEntry(form);
-    setForm(emptyForm);
-    setFormErrors({});
-    setShowForm(false);
-  };
+  function deleteEntry(id) {
+    entries = entries.filter(e => e.id !== id);
+    save();
+    render();
+  }
 
-  const totals = entries.reduce((acc, e) => ({
-    calories: acc.calories + (Number(e.calories) || 0),
-    protein: acc.protein + (Number(e.protein) || 0),
-    carbs: acc.carbs + (Number(e.carbs) || 0),
-    fat: acc.fat + (Number(e.fat) || 0),
-  }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
+  function getTotals() {
+    return entries.reduce((acc, e) => ({
+      calories: acc.calories + (Number(e.calories)||0),
+      protein:  acc.protein  + (Number(e.protein)||0),
+      carbs:    acc.carbs    + (Number(e.carbs)||0),
+      fat:      acc.fat      + (Number(e.fat)||0),
+    }), { calories:0, protein:0, carbs:0, fat:0 });
+  }
 
-  const proteinPct = Math.round((totals.protein / DAILY_TARGETS.protein) * 100);
+  function setRing(id, value, max) {
+    const pct = Math.min(value / max, 1);
+    const dash = pct * CIRC;
+    document.getElementById(id).setAttribute('stroke-dasharray', `${dash} ${CIRC}`);
+  }
 
-  const field = (key, label, placeholder) => (
-    <div>
-      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 4, fontFamily: "monospace", letterSpacing: 1, textTransform: "uppercase" }}>{label}</div>
-      <input
-        type={key === "name" ? "text" : "number"}
-        value={form[key]}
-        onChange={e => { setForm(f => ({ ...f, [key]: e.target.value })); setFormErrors(fe => ({ ...fe, [key]: undefined })); }}
-        onKeyDown={e => e.key === "Enter" && handleAdd()}
-        placeholder={placeholder}
-        style={{
-          width: "100%", background: "rgba(255,255,255,0.05)",
-          border: `1px solid ${formErrors[key] ? "#ff6b6b" : "rgba(255,255,255,0.1)"}`,
-          borderRadius: 8, padding: "9px 12px",
-          color: "#fff", fontSize: 14, outline: "none", fontFamily: "inherit"
-        }}
-      />
-    </div>
-  );
+  function render() {
+    const t = getTotals();
+    const pct = Math.min(t.calories / TARGETS.calories, 1);
+    const over = t.calories > TARGETS.calories;
+    const diff = Math.abs(TARGETS.calories - t.calories);
+    const proteinPct = Math.round((t.protein / TARGETS.protein) * 100);
 
-  return (
-    <div style={{ minHeight: "100vh", background: "#0b0b10", color: "#fff", fontFamily: "'Inter', -apple-system, sans-serif", paddingBottom: 48 }}>
-      <style>{`
-        @keyframes fadeIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
-        * { box-sizing: border-box; }
-        input::placeholder { color: rgba(255,255,255,0.22) !important; }
-        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-      `}</style>
+    // Cal bar
+    document.getElementById('cal-num').textContent = Math.round(t.calories);
+    document.getElementById('cal-fill').style.width = (pct * 100) + '%';
+    document.getElementById('cal-fill').style.background = over ? '#ff6b6b' : 'linear-gradient(90deg, #a8ff78, #78ffd6)';
+    const badge = document.getElementById('cal-badge');
+    badge.textContent = over ? `+${Math.round(diff)} over` : `${Math.round(diff)} left`;
+    badge.style.color = over ? '#ff6b6b' : '#a8ff78';
+    badge.style.background = over ? 'rgba(255,107,107,0.1)' : 'rgba(168,255,120,0.08)';
+    badge.style.border = `1px solid ${over ? 'rgba(255,107,107,0.25)' : 'rgba(168,255,120,0.25)'}`;
+    badge.style.padding = '4px 12px';
+    badge.style.borderRadius = '20px';
+    badge.style.fontSize = '12px';
+    badge.style.fontFamily = 'monospace';
 
-      {/* Header */}
-      <div style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "18px 20px 14px", background: "linear-gradient(180deg, rgba(168,255,120,0.06) 0%, transparent 100%)" }}>
-        <div style={{ maxWidth: 460, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <div style={{ fontSize: 10, letterSpacing: 3, color: "#a8ff78", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 3 }}>Brandon Beatty</div>
-            <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: -0.5 }}>Daily Fuel</div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "monospace" }}>
-              {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-            </div>
-            <div style={{
-              marginTop: 4, fontSize: 11, fontFamily: "monospace",
-              color: proteinPct >= 100 ? "#a8ff78" : proteinPct >= 50 ? "#ffb347" : "#ff6b6b",
-              background: "rgba(255,255,255,0.05)", padding: "2px 8px", borderRadius: 20
-            }}>{proteinPct}% protein</div>
-          </div>
-        </div>
-      </div>
+    // Rings
+    document.getElementById('val-protein').textContent = Math.round(t.protein);
+    document.getElementById('val-carbs').textContent = Math.round(t.carbs);
+    document.getElementById('val-fat').textContent = Math.round(t.fat);
+    setRing('ring-protein', t.protein, TARGETS.protein);
+    setRing('ring-carbs', t.carbs, TARGETS.carbs);
+    setRing('ring-fat', t.fat, TARGETS.fat);
 
-      <div style={{ maxWidth: 460, margin: "0 auto", padding: "0 16px" }}>
+    // Protein badge
+    const pb = document.getElementById('protein-badge');
+    pb.textContent = proteinPct + '% protein';
+    pb.style.color = proteinPct >= 100 ? '#a8ff78' : proteinPct >= 50 ? '#ffb347' : '#ff6b6b';
 
-        {/* Calorie bar */}
-        <div style={{ marginTop: 14, padding: "16px 18px", background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 14 }}>
-          <CalBar value={totals.calories} max={DAILY_TARGETS.calories} />
-        </div>
+    // Entries
+    const list = document.getElementById('entries-list');
+    const logSection = document.getElementById('log-section');
+    const empty = document.getElementById('empty-state');
 
-        {/* Macro rings */}
-        <div style={{ marginTop: 8, padding: "14px 10px", background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 14, display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 4 }}>
-          <MacroRing value={totals.protein} max={DAILY_TARGETS.protein} color="#78b4ff" label="Protein" />
-          <MacroRing value={totals.carbs} max={DAILY_TARGETS.carbs} color="#ffb347" label="Carbs" />
-          <MacroRing value={totals.fat} max={DAILY_TARGETS.fat} color="#ff8fab" label="Fat" />
-        </div>
-
-        {/* Quick add presets */}
-        <div style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 10, letterSpacing: 2, color: "rgba(255,255,255,0.25)", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 6, paddingLeft: 2 }}>Quick Add</div>
-          {PRESETS.map((p, i) => (
-            <button key={i} onClick={() => addEntry(p)} style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              background: "rgba(168,255,120,0.04)", border: "1px solid rgba(168,255,120,0.1)",
-              borderRadius: 10, padding: "10px 14px", cursor: "pointer", textAlign: "left",
-              width: "100%", marginBottom: 5, transition: "background 0.15s"
-            }}
-              onMouseEnter={e => e.currentTarget.style.background = "rgba(168,255,120,0.09)"}
-              onMouseLeave={e => e.currentTarget.style.background = "rgba(168,255,120,0.04)"}
-            >
-              <span style={{ fontSize: 13, color: "#fff", fontWeight: 500 }}>{p.name}</span>
-              <div style={{ display: "flex", gap: 8, fontSize: 11, fontFamily: "monospace", flexShrink: 0, marginLeft: 8 }}>
-                <span style={{ color: "#a8ff78" }}>{p.calories}</span>
-                <span style={{ color: "#78b4ff" }}>P{p.protein}</span>
-                <span style={{ color: "#ffb347" }}>C{p.carbs}</span>
-                <span style={{ color: "#ff8fab" }}>F{p.fat}</span>
-              </div>
-            </button>
-          ))}
-        </div>
-
-        {/* Manual entry toggle */}
-        <button onClick={() => { setShowForm(s => !s); setForm(emptyForm); setFormErrors({}); }} style={{
-          marginTop: 4, width: "100%", padding: "11px",
-          background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)",
-          borderRadius: 10, cursor: "pointer", color: "rgba(255,255,255,0.6)",
-          fontSize: 13, fontWeight: 600, fontFamily: "inherit", transition: "all 0.15s"
-        }}>
-          {showForm ? "Cancel" : "+ Add Custom Food"}
-        </button>
-
-        {/* Manual entry form */}
-        {showForm && (
-          <div style={{ marginTop: 8, padding: "14px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, animation: "fadeIn 0.2s ease" }}>
-            <div style={{ marginBottom: 10 }}>{field("name", "Food Name", "e.g. Grilled chicken breast 6oz")}</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-              {field("calories", "Calories", "300")}
-              {field("protein", "Protein g", "30")}
-              {field("carbs", "Carbs g", "25")}
-              {field("fat", "Fat g", "10")}
-            </div>
-            <button onClick={handleAdd} style={{
-              width: "100%", padding: "12px",
-              background: "rgba(168,255,120,0.15)", border: "1px solid rgba(168,255,120,0.3)",
-              borderRadius: 10, cursor: "pointer", color: "#a8ff78",
-              fontSize: 14, fontWeight: 700, fontFamily: "inherit", transition: "all 0.15s"
-            }}
-              onMouseEnter={e => e.currentTarget.style.background = "rgba(168,255,120,0.22)"}
-              onMouseLeave={e => e.currentTarget.style.background = "rgba(168,255,120,0.15)"}
-            >
-              Log Food
-            </button>
-            <div style={{ marginTop: 8, fontSize: 11, color: "rgba(255,255,255,0.18)", fontFamily: "monospace", textAlign: "center" }}>
-              Send label photos here in chat and I'll give you the numbers
+    if (entries.length === 0) {
+      logSection.style.display = 'none';
+      empty.style.display = formOpen ? 'none' : 'block';
+    } else {
+      logSection.style.display = 'block';
+      empty.style.display = 'none';
+      document.getElementById('log-count').textContent = `Today — ${entries.length} item${entries.length !== 1 ? 's' : ''}`;
+      list.innerHTML = '';
+      [...entries].reverse().forEach(e => {
+        const row = document.createElement('div');
+        row.className = 'entry-row';
+        row.style.gap = '10px';
+        row.innerHTML = `
+          <div class="entry-info">
+            <div class="entry-name">${e.name}</div>
+            <div class="entry-macros">
+              <span style="color:#a8ff78">${e.calories} cal</span>
+              <span style="color:#78b4ff">P ${e.protein}g</span>
+              <span style="color:#ffb347">C ${e.carbs}g</span>
+              <span style="color:#ff8fab">F ${e.fat}g</span>
             </div>
           </div>
-        )}
+          <button class="del-btn" onclick="deleteEntry(${e.id})">×</button>
+        `;
+        list.appendChild(row);
+      });
+    }
+  }
 
-        {/* Food log */}
-        {entries.length > 0 && (
-          <div style={{ marginTop: 12 }}>
-            <div style={{ fontSize: 10, letterSpacing: 2, color: "rgba(255,255,255,0.25)", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 7, paddingLeft: 2 }}>
-              Today — {entries.length} item{entries.length !== 1 ? "s" : ""}
-            </div>
-            {[...entries].reverse().map(e => <EntryRow key={e.id} entry={e} onDelete={deleteEntry} />)}
-          </div>
-        )}
+  function toggleForm() {
+    formOpen = !formOpen;
+    document.getElementById('entry-form').className = formOpen ? 'open' : '';
+    document.getElementById('toggle-btn').textContent = formOpen ? 'Cancel' : '+ Add Custom Food';
+    if (!formOpen) clearForm();
+    if (entries.length === 0) {
+      document.getElementById('empty-state').style.display = formOpen ? 'none' : 'block';
+    }
+  }
 
-        {entries.length === 0 && !showForm && (
-          <div style={{ marginTop: 20, textAlign: "center", padding: "28px 20px", border: "1px dashed rgba(255,255,255,0.07)", borderRadius: 14 }}>
-            <div style={{ fontSize: 26, marginBottom: 8 }}>🍽️</div>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.3)", fontFamily: "monospace" }}>Nothing logged yet</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.18)", marginTop: 4, fontFamily: "monospace" }}>Tap your shake above to start</div>
-          </div>
-        )}
+  function clearForm() {
+    ['f-name','f-cal','f-pro','f-carb','f-fat'].forEach(id => {
+      const el = document.getElementById(id);
+      el.value = '';
+      el.classList.remove('error');
+    });
+  }
 
-        {/* Targets */}
-        <div style={{ marginTop: 14, padding: "10px 14px", background: "rgba(120,180,255,0.03)", border: "1px solid rgba(120,180,255,0.08)", borderRadius: 10 }}>
-          <div style={{ fontSize: 9, letterSpacing: 2.5, color: "rgba(120,180,255,0.4)", textTransform: "uppercase", fontFamily: "monospace", marginBottom: 5 }}>Daily Targets</div>
-          <div style={{ display: "flex", gap: 16, fontSize: 11, fontFamily: "monospace" }}>
-            <span style={{ color: "#a8ff78" }}>{DAILY_TARGETS.calories} cal</span>
-            <span style={{ color: "#78b4ff" }}>P: {DAILY_TARGETS.protein}g</span>
-            <span style={{ color: "#ffb347" }}>C: {DAILY_TARGETS.carbs}g</span>
-            <span style={{ color: "#ff8fab" }}>F: {DAILY_TARGETS.fat}g</span>
-          </div>
+  function logCustom() {
+    const name = document.getElementById('f-name').value.trim();
+    const cal  = document.getElementById('f-cal').value;
+    const pro  = document.getElementById('f-pro').value;
+    const carb = document.getElementById('f-carb').value;
+    const fat  = document.getElementById('f-fat').value;
+
+    let valid = true;
+    if (!name) { document.getElementById('f-name').classList.add('error'); valid = false; }
+    else document.getElementById('f-name').classList.remove('error');
+    if (!cal || isNaN(cal)) { document.getElementById('f-cal').classList.add('error'); valid = false; }
+    else document.getElementById('f-cal').classList.remove('error');
+    if (pro === '' || isNaN(pro)) { document.getElementById('f-pro').classList.add('error'); valid = false; }
+    else document.getElementById('f-pro').classList.remove('error');
+    if (carb === '' || isNaN(carb)) { document.getElementById('f-carb').classList.add('error'); valid = false; }
+    else document.getElementById('f-carb').classList.remove('error');
+    if (fat === '' || isNaN(fat)) { document.getElementById('f-fat').classList.add('error'); valid = false; }
+    else document.getElementById('f-fat').classList.remove('error');
+
+    if (!valid) return;
+
+    addEntry({ name, calories: cal, protein: pro, carbs: carb, fat });
+    clearForm();
+    toggleForm();
+  }
+
+  // Enter key on last field
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && formOpen) logCustom();
+  });
+
+  // Build presets
+  function buildPresets() {
+    const container = document.getElementById('presets');
+    PRESETS.forEach(p => {
+      const btn = document.createElement('button');
+      btn.className = 'preset-btn';
+      btn.innerHTML = `
+        <span class="preset-name">${p.name}</span>
+        <div class="preset-macros">
+          <span style="color:#a8ff78">${p.calories}</span>
+          <span style="color:#78b4ff">P${p.protein}</span>
+          <span style="color:#ffb347">C${p.carbs}</span>
+          <span style="color:#ff8fab">F${p.fat}</span>
         </div>
+      `;
+      btn.onclick = () => addEntry(p);
+      container.appendChild(btn);
+    });
+  }
 
-      </div>
-    </div>
-  );
-}
+  // Set date
+  document.getElementById('today-date').textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+  // Init
+  load();
+  buildPresets();
+  render();
+</script>
+</body>
+</html>
